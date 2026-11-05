@@ -1,0 +1,44 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squeekchain claim helper - unofficial</title>
+<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:auto;padding:16px;background:#16161c;color:#eee}button{padding:10px 14px;margin:4px 0;border:0;border-radius:8px;background:#3b82f6;color:#fff;font-size:16px}textarea,input{width:100%;box-sizing:border-box;margin:4px 0;padding:8px;background:#222;color:#eee;border:1px solid #444;border-radius:6px;font-family:monospace}#log{white-space:pre-wrap;font-family:monospace;font-size:13px;background:#000;padding:8px;border-radius:6px}a{color:#7cc4ff}.warn{background:#3a2a00;padding:8px;border-radius:6px}</style></head><body>
+<h2>Squeekchain claim helper - unofficial</h2>
+<p class="warn">Trang không chính thức. Chỉ gửi 1 giao dịch <b>claim()</b> tới hợp đồng dispenser trên Sepolia, value = 0. Không approve, không bao giờ hỏi private key/seed phrase. Hãy tự kiểm tra trong ví trước khi xác nhận.</p>
+<p>Dispenser: <a target="_blank" href="https://sepolia.etherscan.io/address/0xe78b4420ce205b8864f2f326f3181f9dd5ea8b5f"><code>0xe78b4420ce205b8864f2f326f3181f9dd5ea8b5f</code></a> (chain 11155111)</p>
+<button id="c">1. Kết nối ví &amp; chuyển sang Sepolia</button> <span id="acct"></span>
+<h3>2. Dán voucher</h3>
+<textarea id="j" rows="7" placeholder='{"recipient":"0x...","quantity":"1","authorizationId":"0x...","deadline":"...","signature":"0x..."}'></textarea>
+<button id="p">Điền từ JSON</button>
+<input id="recipient" placeholder="recipient (0x...)"><input id="quantity" placeholder="quantity (1-20)"><input id="authorizationId" placeholder="authorizationId (0x + 64 hex)"><input id="deadline" placeholder="deadline (unix giây)"><input id="signature" placeholder="signature (0x...)">
+<button id="s">3. Kiểm tra &amp; mô phỏng</button> <button id="x">4. Gửi claim</button>
+<div id="log"></div>
+<h3>Cách lấy voucher</h3>
+<ol><li>Mở <a href="https://sepolia.squeekchain.com/mint" target="_blank">sepolia.squeekchain.com/mint</a>, đăng nhập bằng đúng ví nhận, bấm <b>Get claim authorization</b>.</li>
+<li>Voucher là phản hồi của <code>POST https://community.squeekchain.com/v1/community/mint/authorization</code> (hoặc trường <code>authorization</code> trong <code>GET .../v1/community/mint/status</code>). Trên máy tính: DevTools → Network → chọn request <code>authorization</code> → Response → copy JSON dán vào đây (dán nguyên JSON cũng được, trang tự tìm các trường).</li>
+<li>Hoặc trên máy tính, ở tab squeekchain mở Console và chạy:<br><code>fetch('https://community.squeekchain.com/v1/community/mint/status',{headers:{authorization:'Bearer '+JSON.parse(localStorage['squeek.community.session']).token}}).then(r=>r.json()).then(d=>console.log(JSON.stringify(d.authorization)))</code></li></ol>
+<p>Trang này không thể tự lấy voucher: API chỉ cho phép trang squeekchain gọi (CORS) và cần token đăng nhập của bạn. Voucher có hạn ngắn, lấy xong dán ngay.</p>
+<script>
+const D='0xe78b4420ce205b8864f2f326f3181f9dd5ea8b5f',RPC='https://ethereum-sepolia-rpc.publicnode.com',CH='0xaa36a7';
+const $=i=>document.getElementById(i),log=m=>{$('log').textContent+=m+'\n'};
+const W=()=>window.okxwallet||window.ethereum;let acct=null;
+const pad=h=>h.padStart(64,'0'),hx=v=>BigInt(v).toString(16);
+function find(o){if(!o||typeof o!='object')return null;if(o.signature&&o.authorizationId)return o;for(const k in o){const r=find(o[k]);if(r)return r}return null}
+$('p').onclick=()=>{try{const v=find(JSON.parse($('j').value));if(!v)throw'không thấy authorizationId/signature';['recipient','quantity','authorizationId','deadline','signature'].forEach(k=>$(k).value=v[k]??'');log('Đã điền voucher.')}catch(e){log('Lỗi JSON: '+e)}};
+$('c').onclick=async()=>{const w=W();if(!w)return log('Không thấy ví. Mở trang trong trình duyệt của app OKX Wallet hoặc có extension.');
+try{acct=(await w.request({method:'eth_requestAccounts'}))[0].toLowerCase();$('acct').textContent=acct;
+try{await w.request({method:'wallet_switchEthereumChain',params:[{chainId:CH}]})}catch(e){await w.request({method:'wallet_addEthereumChain',params:[{chainId:CH,chainName:'Sepolia',nativeCurrency:{name:'Sepolia ETH',symbol:'ETH',decimals:18},rpcUrls:[RPC],blockExplorerUrls:['https://sepolia.etherscan.io']}]})}
+log('Đã kết nối '+acct+', chain '+await w.request({method:'eth_chainId'}))}catch(e){log('Lỗi: '+(e.message||e))}};
+function build(){const r=$('recipient').value.trim().toLowerCase(),q=$('quantity').value.trim(),id=$('authorizationId').value.trim().toLowerCase(),dl=$('deadline').value.trim(),sg=$('signature').value.trim().toLowerCase();
+if(!/^0x[0-9a-f]{40}$/.test(r))throw'recipient sai';if(!/^0x[0-9a-f]{64}$/.test(id))throw'authorizationId sai';if(!/^0x([0-9a-f]{2})+$/.test(sg))throw'signature sai';
+const n=BigInt(q);if(n<1n||n>20n)throw'quantity phải 1-20';if(!acct)throw'chưa kết nối ví';if(r!==acct)throw'recipient khác ví đang kết nối ('+acct+')';
+if(BigInt(dl)<=BigInt(Math.floor(Date.now()/1e3)))throw'voucher đã hết hạn, lấy voucher mới';
+const s=sg.slice(2),L=s.length/2,body=s.padEnd(Math.ceil(s.length/64)*64,'0');
+return '0x3374b3df'+pad(r.slice(2))+pad(hx(n))+id.slice(2)+pad(hx(dl))+pad(hx(160))+pad(hx(L))+body}
+async function rpc(m,p){const r=await(await fetch(RPC,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})})).json();if(r.error)throw r.error.message+(r.error.data?' '+r.error.data:'');return r.result}
+async function check(){const data=build();const o=await rpc('eth_call',[{to:D,data:'0xd1a00d50'},'latest']);if(BigInt(o)!==1n)throw'claimsOpen = false';
+await rpc('eth_call',[{from:acct,to:D,data,value:'0x0'},'latest']);const g=await rpc('eth_estimateGas',[{from:acct,to:D,data,value:'0x0'}]);
+const b=await rpc('eth_getBalance',[acct,'latest']);log('Mô phỏng OK. Gas ~'+BigInt(g)+', số dư '+(Number(BigInt(b))/1e18)+' ETH Sepolia');return {data,g}}
+$('s').onclick=async()=>{try{await check()}catch(e){log('Không qua: '+(e.message||e))}};
+$('x').onclick=async()=>{try{const {data,g}=await check();const w=W();if(await w.request({method:'eth_chainId'})!==CH)throw'ví không ở Sepolia';
+const h=await w.request({method:'eth_sendTransaction',params:[{from:acct,to:D,data,value:'0x0',gas:'0x'+(BigInt(g)*12n/10n).toString(16)}]});
+log('Đã gửi: '+h);const a=document.createElement('a');a.href='https://sepolia.etherscan.io/tx/'+h;a.target='_blank';a.textContent='Xem trên Etherscan';$('log').appendChild(a)}catch(e){log('Lỗi: '+(e.message||e))}};
+</script></body></html>
